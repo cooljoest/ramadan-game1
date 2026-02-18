@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ramadan Word Search - Mobile</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: "Trebuchet MS", Arial, sans-serif;
+  background: radial-gradient(circle at top, #0f5132, #063d27);
+  color: #fff;
+  text-align: center;
+  touch-action: manipulation;
+  overflow: hidden;
+}
+
+/* Start Screen */
+#startScreen {
+  padding: 40px 20px;
+}
+#startScreen input {
+  padding: 10px 12px;
+  font-size: 18px;
+  border-radius: 5px;
+  border: none;
+  margin-bottom: 15px;
+  width: 80%;
+}
+#startScreen button {
+  padding: 10px 20px;
+  font-size: 18px;
+  border: none;
+  border-radius: 5px;
+  background: #f9d77e;
+  color: #063d27;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* Game Screen */
+#gameScreen {
+  display: none;
+  min-height: 100vh;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  display: flex;
+  padding: 10px;
+  overflow: hidden;
+}
+
+h2 {
+  margin-top: 15px;
+  color: #f9d77e;
+}
+
+#timer {
+  font-size: 22px;
+  margin: 10px;
+  color: #ffd966;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-gap: 5px;
+  max-width: 90vw; /* Adjust grid to fit the width */
+  max-height: 90vh; /* Adjust grid to fit the height */
+  margin-bottom: 10px;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.cell {
+  border: 1px solid #d4af37;
+  padding: 12px;
+  font-size: 18px;
+  user-select: none;
+  background: rgba(255, 255, 255, 0.95);
+  color: #063d27;
+  font-weight: bold;
+}
+
+.cell.selected {
+  background: #ffe8a1;
+}
+
+.cell.correct {
+  background: #198754;
+  color: #fff;
+}
+
+.words {
+  margin: 15px;
+  font-size: 14px;
+  color: #f9d77e;
+}
+
+.words span.found {
+  text-decoration: line-through;
+  color: #198754;
+  font-weight: bold;
+}
+
+.footer {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Sparkles */
+.sparkle {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  background: gold;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: sparkleAnim 1s linear forwards;
+}
+
+@keyframes sparkleAnim {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-200px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* Scoreboard */
+#scoreboard {
+  margin-top: 15px;
+  max-width: 95vw;
+  text-align: left;
+  color: #ffd966;
+  word-wrap: break-word;
+}
+</style>
+</head>
+
+<body>
+
+<!-- Start Screen -->
+<div id="startScreen">
+  <h2>🌙 Ramadan Word Search</h2>
+  <p>Enter your name to start:</p>
+  <input type="text" id="playerName" placeholder="Your Name" />
+  <br>
+  <button id="startBtn">Start Game</button>
+</div>
+
+<!-- Game Screen -->
+<div id="gameScreen">
+  <h2>🌙 Ramadan Word Search</h2>
+  <div id="timer">05:00</div>
+  <div class="grid" id="grid"></div>
+  <div class="words" id="wordsList"></div>
+  <div class="footer">Swipe letters to find the words</div>
+  <div id="scoreboard"></div>
+</div>
+
+<!-- Sounds -->
+<audio id="selectSound" src="https://assets.mixkit.co/sfx/preview/mixkit-click-melodic-tone-1129.mp3"></audio>
+<audio id="correctSound" src="https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3"></audio>
+<audio id="timeUpSound" src="https://assets.mixkit.co/sfx/preview/mixkit-game-over-1947.mp3"></audio>
+<audio id="countdownSound" src="https://assets.mixkit.co/sfx/preview/mixkit-countdown-10-seconds-924.mp3"></audio>
+
+<script>
+// Mobile Start Button
+const startBtn = document.getElementById("startBtn");
+const playerNameInput = document.getElementById("playerName");
+const startScreen = document.getElementById("startScreen");
+const gameScreen = document.getElementById("gameScreen");
+
+let playerName = "";
+let score = 0;
+let foundWords = [];
+
+startBtn.addEventListener("click", () => {
+  playerName = playerNameInput.value.trim();
+  if(playerName === ""){
+    alert("Please enter your name!");
+    return;
+  }
+  try {
+    startScreen.style.display = "none";
+    gameScreen.style.display = "flex";
+    initGame();
+  } catch(e){
+    console.error("Game init error:", e);
+    alert("Something went wrong! Check console.");
+  }
+});
+
+// Word Search Game
+function initGame(){
+  const gridSize = 12;
+  const words = [
+    "RAMADAN","FAST","IFTAR","SUHOOR","QURAN",
+    "PRAYER","MOSQUE","CHARITY","CRESCENT","EID",
+    "TARAWEEH","ZAKAT","HADITH","SAHUR","SAWM"
+  ];
+  const directions = [
+    [0, 1],   // Horizontal right
+    [1, 0],   // Vertical down
+    [0, -1],  // Horizontal left
+    [-1, 0]   // Vertical up
+  ];
+
+  let grid = Array(gridSize).fill().map(()=>Array(gridSize).fill(""));
+  foundWords = [];
+  score = 0;
+
+  const wordsListEl = document.getElementById("wordsList");
+  wordsListEl.innerHTML = "<strong>Find the words:</strong><br>";
+  words.forEach((w,i)=>{
+    let sp = document.createElement("span");
+    sp.textContent = w + (i < words.length - 1 ? " / " : "");
+    sp.id = "word-" + w;
+    wordsListEl.appendChild(sp);
+  });
+
+  function placeWord(word){
+    let placed = false;
+    while(!placed){
+      let d = directions[Math.floor(Math.random() * directions.length)];
+      let r = Math.floor(Math.random() * gridSize);
+      let c = Math.floor(Math.random() * gridSize);
+      let ok = true;
+      for (let i = 0; i < word.length; i++) {
+        let rr = r + d[0] * i, cc = c + d[1] * i;
+        if (rr < 0 || cc < 0 || rr >= gridSize || cc >= gridSize ||
+          (grid[rr][cc] !== "" && grid[rr][cc] !== word[i])) {
+          ok = false; break;
+        }
+      }
+      if (ok) {
+        for (let i = 0; i < word.length; i++) {
+          grid[r + d[0] * i][c + d[1] * i] = word[i];
+        }
+        placed = true;
+      }
+    }
+  }
+
+  words.forEach(placeWord);
+
+  // Fill empty cells with random letters
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      if (grid[r][c] === "") {
+        grid[r][c] = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+      }
+    }
+  }
+
+  const gridEl = document.getElementById("grid");
+  let selecting = false;
+  let selectedCells = [];
+  const selectSound = document.getElementById("selectSound");
+  const correctSound = document.getElementById("correctSound");
+
+  function render() {
+    gridEl.innerHTML = "";
+    grid.flat().forEach(l => {
+      let d = document.createElement("div");
+      d.className = "cell";
+      d.textContent = l;
+      gridEl.appendChild(d);
+    });
+  }
+  render();
+
+  // Touch Events for Mobile
+  gridEl.addEventListener("touchstart", e => {
+    selecting = true;
+    selectedCells = [];
+    handle(e.target);
+  });
+
+  gridEl.addEventListener("touchmove", e => {
+    let t = document.elementFromPoint(
+      e.touches[0].clientX,
+      e.touches[0].clientY
+    );
+    handle(t);
+  });
+
+  gridEl.addEventListener("touchend", () => {
+    check();
+    selecting = false;
+  });
+
+  function handle(el) {
+    if (selecting && el.classList.contains("cell") && !selectedCells.includes(el)) {
+      el.classList.add("selected");
+      selectedCells.push(el);
+      selectSound.currentTime = 0;
+      selectSound.play();
+    }
+  }
+
+  function check() {
+    let w = selectedCells.map(c => c.textContent).join("");
+    let rev = w.split("").reverse().join("");
+    let foundWord = words.includes(w) ? w : (words.includes(rev) ? rev : null);
+    if (foundWord && !foundWords.includes(foundWord)) {
+      foundWords.push(foundWord);
+      let pts = Math.floor(Math.random() * 10) + 1;
+      score += pts;
+
+      let wordSpan = document.getElementById("word-" + foundWord);
+      if (wordSpan) wordSpan.classList.add("found");
+
+      selectedCells.forEach(c => {
+        c.classList.remove("selected");
+        c.classList.add("correct");
+      });
+      correctSound.play();
+      updateScoreboard();
+      if (foundWords.length === words.length) {
+        sparkleAll();
+        setTimeout(() => endGame(), 1000);
+      }
+    } else {
+      selectedCells.forEach(c => c.classList.remove("selected"));
+    }
+  }
+
+  function updateScoreboard() {
+    const sb = document.getElementById("scoreboard");
+    sb.innerHTML = `<strong>Player:</strong> ${playerName} | <strong>Score:</strong> ${score} | <strong>Words found:</strong> ${foundWords.length} / ${words.length}`;
+  }
+
+  function sparkleAll() {
+    for (let i = 0; i < 50; i++) {
+      let sparkle = document.createElement("div");
+      sparkle.className = "sparkle";
+      sparkle.style.left = Math.random() * window.innerWidth + "px";
+      sparkle.style.top = Math.random() * window.innerHeight + "px";
+      document.body.appendChild(sparkle);
+      setTimeout(() => sparkle.remove(), 1000);
+    }
+  }
+
+  let time = 300;
+  const timerEl = document.getElementById("timer");
+  const timeUpSound = document.getElementById("timeUpSound");
+  const countdownSound = document.getElementById("countdownSound");
+
+  const timer = setInterval(() => {
+    time--;
+    let m = String(Math.floor(time / 60)).padStart(2, "0");
+    let s = String(time % 60).padStart(2, "0");
+    timerEl.textContent = `${m}:${s}`;
+    if (time === 10) {
+      countdownSound.play();
+    }
+    if (time <= 0) {
+      clearInterval(timer);
+      timeUpSound.play();
+      endGame();
+    }
+  }, 1000);
+
+  function endGame() {
+    alert(`⏰ Time’s up or All Words Found!\n${playerName}'s Score: ${score}`);
+    saveScore(playerName, score);
+    showHighScores();
+    startScreen.style.display = "block";
+    gameScreen.style.display = "none";
+  }
+
+  // Google Sheet save
+  function saveScore(name, pts) {
+    const url = "https://script.google.com/macros/s/AKfycbxJL66gV0U3hVL6qA0_U_W47sdA9DvlOlA8EAnxvDglLKK-Y_7LP311TgWjcT1kzqwl0A/exec";
+    fetch(url, {
+      method: "POST",
+      body: JSON.stringify({name: name, score: pts})
+    })
+    .then(res => res.json())
+    .then(data => console.log("Score saved:", data))
+    .catch(err => console.error("Error saving score:", err));
+
+    let scores = JSON.parse(localStorage.getItem("ramadanScores") || "[]");
+    scores.push({name: name, score: pts});
+    localStorage.setItem("ramadanScores", JSON.stringify(scores));
+  }
+
+  function showHighScores() {
+    let scores = JSON.parse(localStorage.getItem("ramadanScores") || "[]");
+    scores.sort((a, b) => b.score - a.score);
+    let sb = document.getElementById("scoreboard");
+    sb.innerHTML += "<h3>🏆 High Scores</h3>";
+    scores.forEach(s => sb.innerHTML += `${s.name} : ${s.score}<br>`);
+  }
+
+  updateScoreboard();
+}
+</script>
+
+</body>
+</html>
